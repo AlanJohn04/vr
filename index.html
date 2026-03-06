@@ -731,6 +731,22 @@
       }
       renderer.render(scene, camera);
     }
+
+    // Helpful check to inform desktop users why AR isn't working
+    setTimeout(() => {
+      const btn = document.getElementById('ARButton');
+      if (btn && btn.innerText === 'WEBXR NOT AVAILABLE') {
+        btn.innerText = '⚠️ OPEN ON YOUR PHONE TO USE AR';
+        const msg = document.createElement('div');
+        msg.style.color = '#ef4444';
+        msg.style.marginTop = '20px';
+        msg.style.fontSize = '14px';
+        msg.style.maxWidth = '400px';
+        msg.style.fontWeight = 'bold';
+        msg.innerHTML = 'Desktop computers do not have AR capabilities!<br><br>👉 Type <b>alanjohn04.github.io/vr</b> into your Android phone (Chrome) or iPhone (WebXR Viewer app) to see the magic.';
+        document.getElementById('intro').appendChild(msg);
+      }
+    }, 1500);
   </script>
 </body>
 
