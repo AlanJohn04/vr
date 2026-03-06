@@ -245,8 +245,8 @@
 
     <div id="ar-btn-container"></div>
     <button id="fallback-btn"
-      style="display:none; margin-top:20px; padding:15px 30px; border-radius:30px; background:#3b82f6; border:none; color:white; font-weight:800; cursor:pointer; font-size:16px; box-shadow: 0 10px 25px rgba(59,130,246,0.4);">
-      USE CAMERA FALLBACK (NO AR)
+      style="display:none; margin-top:20px; padding:16px 36px; border-radius:30px; background:linear-gradient(45deg, #3b82f6, #8b5cf6); border:none; color:white; font-family: 'Outfit', sans-serif; font-weight:800; cursor:pointer; font-size:18px; box-shadow: 0 10px 25px rgba(59,130,246,0.4); text-transform: uppercase;">
+      Start Basic AR (Pokemon Go Style)
     </button>
   </div>
 
@@ -765,19 +765,35 @@
       renderer.render(scene, camera);
     }
 
-    // Help non-XR devices use a basic webcam fallback mode
-    setTimeout(() => {
-      const btn = document.getElementById('ARButton');
-      if (btn && btn.innerText === 'WEBXR NOT AVAILABLE') {
-        document.getElementById('fallback-btn').style.display = 'block';
+    // Robust WebXR Support Check for Pokemon Go style Fallback
+    const initFallbackCheck = async () => {
+      let runFallback = false;
+      if ('xr' in navigator && navigator.xr) {
+        try {
+          const supported = await navigator.xr.isSessionSupported('immersive-ar');
+          if (!supported) runFallback = true;
+        } catch (e) { runFallback = true; }
+      } else {
+        runFallback = true;
       }
-    }, 1500);
+
+      if (runFallback) {
+        document.getElementById('fallback-btn').style.display = 'block';
+
+        // Ensure the default disabled ARButton is hidden
+        const hideInterval = setInterval(() => {
+          const arBtn = document.getElementById('ARButton');
+          if (arBtn) { arBtn.style.display = 'none'; clearInterval(hideInterval); }
+        }, 100);
+      }
+    };
+    initFallbackCheck();
 
     // Global Fallback Logic
     document.getElementById('fallback-btn').addEventListener('click', async () => {
       intro.style.display = 'none';
       appUi.style.display = 'flex';
-      infoBanner.innerText = 'Fallback Mode: Point camera & tap the ground.';
+      infoBanner.innerText = 'Pokemon GO Mode: Point camera & tap the ground.';
 
       renderer.setClearColor(0x000000, 0); // Transparent background
 
