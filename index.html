@@ -244,6 +244,10 @@
 
 
     <div id="ar-btn-container"></div>
+    <button id="fallback-btn"
+      style="display:none; margin-top:20px; padding:15px 30px; border-radius:30px; background:#3b82f6; border:none; color:white; font-weight:800; cursor:pointer; font-size:16px; box-shadow: 0 10px 25px rgba(59,130,246,0.4);">
+      USE CAMERA FALLBACK (NO AR)
+    </button>
   </div>
 
   <div id="overlay">
@@ -479,7 +483,16 @@
           // Spawn the instance
           spawnClone(model, position, quaternion);
         },
-        undefined, // progress callback
+        (xhr) => {
+          // The Chair and Table files are HUGE (45MB+), so a visual loader is critical!
+          if (xhr.lengthComputable) {
+            const percentComplete = Math.round((xhr.loaded / xhr.total) * 100);
+            loadingSpinner.innerText = `Downloading ${itemKey}... ${percentComplete}%`;
+          } else {
+            const mbs = (xhr.loaded / (1024 * 1024)).toFixed(1);
+            loadingSpinner.innerText = `Downloading ${itemKey}... ${mbs}MB`;
+          }
+        },
         (error) => {
           // Failed! The file probably doesn't exist yet. Fallback to procedural shape to avoid game break.
           console.warn(`Could not load ${url}. Use Sketchfab to get a model. Falling back to procedural block.`);
@@ -732,21 +745,146 @@
       renderer.render(scene, camera);
     }
 
-    // Helpful check to inform desktop users why AR isn't working
+    // Help non-XR devices use a basic webcam fallback mode
     setTimeout(() => {
       const btn = document.getElementById('ARButton');
       if (btn && btn.innerText === 'WEBXR NOT AVAILABLE') {
-        btn.innerText = '⚠️ OPEN ON YOUR PHONE TO USE AR';
-        const msg = document.createElement('div');
-        msg.style.color = '#ef4444';
-        msg.style.marginTop = '20px';
-        msg.style.fontSize = '14px';
-        msg.style.maxWidth = '400px';
-        msg.style.fontWeight = 'bold';
-        msg.innerHTML = 'Desktop computers do not have AR capabilities!<br><br>👉 Type <b>alanjohn04.github.io/vr</b> into your Android phone (Chrome) or iPhone (WebXR Viewer app) to see the magic.';
-        document.getElementById('intro').appendChild(msg);
+        document.getElementById('fallback-btn').style.display = 'block';
       }
     }, 1500);
+
+    // Global Fallback Logic
+    document.getElementById('fallback-btn').addEventListener('click', async () => {
+      intro.style.display = 'none';
+      appUi.style.display = 'flex';
+      infoBanner.innerText = 'Fallback Mode: Tap the ground to place items using webcam feed.';
+
+      renderer.setClearColor(0x000000, 0); // Transparent background
+
+      // Setup Background Webcam
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.playsInline = true;
+      video.style.position = 'absolute';
+      video.style.top = '0';
+      video.style.left = '0';
+      video.style.width = '100%';
+      video.style.height = '100%';
+      video.style.objectFit = 'cover';
+      video.style.zIndex = '-1';
+      document.body.appendChild(video);
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        video.srcObject = stream;
+      } catch (err) {
+        console.warn("Camera denied.");
+        document.body.style.backgroundColor = '#1e293b';
+      }
+
+      // Pre-position camera
+      camera.position.set(0, 1.5, 3);
+      camera.lookAt(0, 0, 0);
+
+      // Virtual Ground for Raycasting
+      const virtualGround = new THREE.Mesh(
+        new THREE.PlaneGeometry(50, 50).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+      scene.add(virtualGround);
+
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+
+      const onPointerDown = (event) => {
+        // Ignore UI clicks
+        if (event.target.closest('#app-ui') || event.target.tagName === 'BUTTON') return;
+
+        const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+        const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+        mouse.x = (clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        if (currentMode === MODES.PLACE) {
+          const intersects = raycaster.intersectObject(virtualGround);
+          if (intersects.length > 0) {
+            const quat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI);
+            loadAsset(currentItem, intersects[0].point, quat);
+          }
+        }
+        else if (currentMode === MODES.MOVE) {
+          if (movingObject) {
+            movingObject.traverse(child => {
+              if (child.isMesh && child.material) {
+                child.material.opacity = child.userData.originalOpacity || 1;
+                child.material.transparent = child.userData.originalTransparent || false;
+              }
+            });
+            movingObject = null;
+            infoBanner.innerText = 'Locked.';
+          } else {
+            const hitBoxes = objectsList.map(obj => obj.userData.hitBox).filter(b => b);
+            const hits = raycaster.intersectObjects(hitBoxes);
+            if (hits.length > 0) {
+              movingObject = hits[0].object.parent;
+              movingObject.traverse(child => {
+                if (child.isMesh && child.material) {
+                  child.material.transparent = true;
+                  child.material.opacity = 0.5;
+                }
+              });
+              infoBanner.innerText = 'Guiding it over floor... Tap anywhere to place.';
+            }
+          }
+        }
+        else if (currentMode === MODES.SCALE) {
+          const hitBoxes = objectsList.map(obj => obj.userData.hitBox).filter(b => b);
+          const hits = raycaster.intersectObjects(hitBoxes);
+          if (hits.length > 0) {
+            const hit = hits[0].object.parent;
+            hit.userData.scaleLevel += 0.2;
+            if (hit.userData.scaleLevel > 2.0) hit.userData.scaleLevel = 0.6;
+            const s = hit.userData.scaleLevel;
+            hit.scale.set(s, s, s);
+            infoBanner.innerText = `Scale: ${Math.round(s * 100)}%`;
+          }
+        }
+        else if (currentMode === MODES.DELETE) {
+          const hitBoxes = objectsList.map(obj => obj.userData.hitBox).filter(b => b);
+          const hits = raycaster.intersectObjects(hitBoxes);
+          if (hits.length > 0) {
+            const hit = hits[0].object.parent;
+            scene.remove(hit);
+            objectsList.splice(objectsList.indexOf(hit), 1);
+            infoBanner.innerText = 'Deleted successfully!';
+          }
+        }
+      };
+
+      const onPointerMove = (event) => {
+        if (!movingObject || currentMode !== MODES.MOVE) return;
+        const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+        const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+        mouse.x = (clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObject(virtualGround);
+        if (intersects.length > 0) {
+          movingObject.position.copy(intersects[0].point);
+        }
+      };
+
+      window.addEventListener('pointerdown', onPointerDown);
+      window.addEventListener('pointermove', onPointerMove);
+
+      const animateFallback = () => {
+        requestAnimationFrame(animateFallback);
+        renderer.render(scene, camera);
+      };
+      animateFallback();
+    });
   </script>
 </body>
 
