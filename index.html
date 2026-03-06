@@ -274,9 +274,9 @@
         </div>
 
         <div class="panel horizontal-tray">
-          <button id="btn-sofa" class="active-mode">
-            <span class="icon">🛋️</span>
-            <span class="label">Sofa</span>
+          <button id="btn-vase" class="active-mode">
+            <span class="icon">🏺</span>
+            <span class="label">Vase</span>
           </button>
           <button id="btn-chair">
             <span class="icon">🪑</span>
@@ -317,14 +317,14 @@
     const gltfLoader = new GLTFLoader();
     // Cache our models so we only load each `.glb` once, then clone it for multiple drops
     const modelCache = {
-      'sofa': null,
+      'vase': null,
       'chair': null,
       'table': null
     };
 
     const MODES = { PLACE: 'place', MOVE: 'move', SCALE: 'scale', DELETE: 'delete' };
     let currentMode = MODES.PLACE;
-    let currentItem = 'sofa';
+    let currentItem = 'vase';
     let movingObject = null;
 
     const objectsList = [];
@@ -345,14 +345,14 @@
 
     function updateUI() {
       // Reset items and actions classes
-      [btnSofa, btnChair, btnTable].forEach(btn => btn.classList.remove('active-mode'));
+      [btnVase, btnChair, btnTable].forEach(btn => btn.classList.remove('active-mode'));
       [btnMove, btnScale, btnDelete].forEach(btn => {
         btn.classList.remove('active-mode');
         btn.classList.remove('danger-mode');
       });
 
       if (currentMode === MODES.PLACE) {
-        if (currentItem === 'sofa') btnSofa.classList.add('active-mode');
+        if (currentItem === 'vase') btnVase.classList.add('active-mode');
         if (currentItem === 'chair') btnChair.classList.add('active-mode');
         if (currentItem === 'table') btnTable.classList.add('active-mode');
         infoBanner.innerText = 'Tap your floor to place ' + currentItem;
@@ -384,7 +384,7 @@
     }
 
     // Connect UI clicks
-    btnSofa.addEventListener('click', () => { currentItem = 'sofa'; setMode(MODES.PLACE); });
+    btnVase.addEventListener('click', () => { currentItem = 'vase'; setMode(MODES.PLACE); });
     btnChair.addEventListener('click', () => { currentItem = 'chair'; setMode(MODES.PLACE); });
     btnTable.addEventListener('click', () => { currentItem = 'table'; setMode(MODES.PLACE); });
 
@@ -456,7 +456,14 @@
       // We haven't loaded this yet. Try fetching from assets folder.
       loadingSpinner.style.display = 'block';
 
-      const url = `./assets/${itemKey}.glb`;
+      // Map UI items to the exact filenames of your downloaded models
+      const fileMap = {
+        'vase': 'old_half_glazed_iranian_vase.glb',
+        'chair': 'old_wooden_chair_05_low-poly_pbr.glb',
+        'table': 'old_wooden_table.glb'
+      };
+
+      const url = `./assets/${fileMap[itemKey]}`;
 
       gltfLoader.load(url,
         (gltf) => {
@@ -464,7 +471,12 @@
           loadingSpinner.style.display = 'none';
 
           let model = gltf.scene;
-          model = normalizeModelSize(model, 1.2); // make it roughly 1.2 meters
+
+          // Custom base scales: some models need different sizes
+          let targetScale = 1.0;
+          if (itemKey === 'vase') targetScale = 0.4; // Make vase somewhat small
+
+          model = normalizeModelSize(model, targetScale);
 
           enableShadows(model);
 
@@ -481,7 +493,7 @@
           loadingSpinner.style.display = 'none';
 
           let color = 0x4ade80;
-          if (itemKey === 'sofa') color = 0xef4444;
+          if (itemKey === 'vase') color = 0xef4444;
           if (itemKey === 'table') color = 0x3b82f6;
 
           const group = new THREE.Group();
