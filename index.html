@@ -796,6 +796,8 @@
       infoBanner.innerText = 'Pokemon GO Mode: Point camera & tap the ground.';
 
       renderer.setClearColor(0x000000, 0); // Transparent background
+      document.body.style.backgroundColor = 'transparent'; // Show hidden video
+      document.documentElement.style.backgroundColor = 'transparent';
 
       // Setup Background Webcam
       const video = document.createElement('video');
