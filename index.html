@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>AR Room Decorator App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #4ade80;
+      --primary-glow: rgba(74, 222, 128, 0.4);
+      --danger: #ef4444;
+      --bg-glass: rgba(15, 23, 42, 0.7);
+      --border-glass: rgba(255, 255, 255, 0.1);
+      --text: #f8fafc;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: 'Outfit', sans-serif;
+      background-color: #000;
+      color: var(--text);
+      touch-action: none;
+    }
+
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    #app-ui {
+      display: none;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .panel {
+      pointer-events: auto;
+      background: var(--bg-glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-glass);
+      border-radius: 20px;
+      padding: 10px;
+      display: flex;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    #info-banner {
+      margin: 20px auto 0;
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-weight: 600;
+      font-size: 15px;
+      letter-spacing: 0.5px;
+      text-align: center;
+      transition: all 0.3s ease;
+      animation: float 3s ease-in-out infinite;
+    }
+
+    #loading-spinner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--bg-glass);
+      padding: 20px 40px;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: bold;
+      display: none;
+      z-index: 50;
+      border: 1px solid var(--primary);
+      box-shadow: 0 0 20px var(--primary-glow);
+    }
+
+    @keyframes float {
+      0% {
+        transform: translateY(0px);
+      }
+
+      50% {
+        transform: translateY(-5px);
+      }
+
+      100% {
+        transform: translateY(0px);
+      }
+    }
+
+    #bottom-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding: 20px;
+      gap: 15px;
+    }
+
+    .vertical-tray {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .horizontal-tray {
+      flex-direction: row;
+      gap: 10px;
+      overflow-x: auto;
+    }
+
+    button {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      padding: 12px;
+      border-radius: 14px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 65px;
+      gap: 5px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    button:active {
+      transform: scale(0.95);
+    }
+
+    button.active-mode {
+      background: var(--primary);
+      box-shadow: 0 0 15px var(--primary-glow);
+      border-color: rgba(255, 255, 255, 0.4);
+      color: #0f172a;
+    }
+
+    button.danger-mode {
+      background: var(--danger);
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+    }
+
+    .icon {
+      font-size: 22px;
+    }
+
+    .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: 800;
+    }
+
+    /* Intro Screen */
+    #intro {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #0f172a, #1e1b4b);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      text-align: center;
+      padding: 20px;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+
+    #intro h1 {
+      font-size: 40px;
+      margin-bottom: 15px;
+      font-weight: 800;
+      background: -webkit-linear-gradient(45deg, #34d399, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    #intro p {
+      font-size: 16px;
+      color: #94a3b8;
+      max-width: 450px;
+      margin-bottom: 30px;
+      line-height: 1.6;
+    }
+
+    .instructions-box {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 15px;
+      border-radius: 12px;
+      text-align: left;
+      margin-bottom: 40px;
+      max-width: 450px;
+      font-size: 14px;
+      color: #cbd5e1;
+    }
+
+    /* Override AR Button styling */
+    #ARButton {
+      position: relative !important;
+      bottom: auto !important;
+      padding: 16px 36px !important;
+      border-radius: 30px !important;
+      background: var(--primary) !important;
+      border: none !important;
+      color: #0f172a !important;
+      font-family: 'Outfit', sans-serif !important;
+      font-weight: 800 !important;
+      font-size: 18px !important;
+      box-shadow: 0 10px 25px var(--primary-glow) !important;
+      transition: transform 0.2s, box-shadow 0.2s !important;
+      letter-spacing: 0.5px;
+    }
+
+    #ARButton:hover {
+      transform: translateY(-2px) !important;
+      box-shadow: 0 15px 35px var(--primary-glow) !important;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="intro">
+    <h1>AR Decorator</h1>
+    <p>Visualize real 3D assets in your space. We've upgraded this app to support standard <b>.glb</b> files.</p>
+
+    <div class="instructions-box">
+      <b>Developer Note for adding your own models:</b><br />
+      1. Download free `.glb` 3D Models from <a href="https://sketchfab.com" target="_blank"
+        style="color:#4ade80;">Sketchfab</a> or PolyPizza.<br />
+      2. Place them inside the `assets/` folder of this project.<br />
+      3. Name them <b>sofa.glb</b>, <b>chair.glb</b>, and <b>table.glb</b>.<br />
+      <i>* The app automatically scales imported files to ~1 meter wide to prevent giant objects!</i>
+    </div>
+
+    <div id="ar-btn-container"></div>
+  </div>
+
+  <div id="overlay">
+    <div id="app-ui">
+      <div id="info-banner" class="panel">Scan floor slowly to begin</div>
+
+      <div id="bottom-controls">
+        <div class="panel vertical-tray">
+          <button id="btn-move">
+            <span class="icon">🖐️</span>
+            <span class="label">Move</span>
+          </button>
+          <button id="btn-scale">
+            <span class="icon">↕️</span>
+            <span class="label">Scale</span>
+          </button>
+          <button id="btn-delete">
+            <span class="icon">🗑️</span>
+            <span class="label">Delete</span>
+          </button>
+        </div>
+
+        <div class="panel horizontal-tray">
+          <button id="btn-sofa" class="active-mode">
+            <span class="icon">🛋️</span>
+            <span class="label">Sofa</span>
+          </button>
+          <button id="btn-chair">
+            <span class="icon">🪑</span>
+            <span class="label">Chair</span>
+          </button>
+          <button id="btn-table">
+            <span class="icon">🟫</span>
+            <span class="label">Table</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="loading-spinner">Loading 3D Model...</div>
+
+  <!-- Import Three.js and GLTFLoader -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { ARButton } from 'three/addons/webxr/ARButton.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    let camera, scene, renderer;
+    let controller, reticle;
+    let hitTestSource = null;
+    let hitTestSourceRequested = false;
+
+    // We instantiate one GLTF loader for placing 3D objects
+    const gltfLoader = new GLTFLoader();
+    // Cache our models so we only load each `.glb` once, then clone it for multiple drops
+    const modelCache = {
+      'sofa': null,
+      'chair': null,
+      'table': null
+    };
+
+    const MODES = { PLACE: 'place', MOVE: 'move', SCALE: 'scale', DELETE: 'delete' };
+    let currentMode = MODES.PLACE;
+    let currentItem = 'sofa';
+    let movingObject = null;
+
+    const objectsList = [];
+
+    // UI elements
+    const intro = document.getElementById('intro');
+    const appUi = document.getElementById('app-ui');
+    const infoBanner = document.getElementById('info-banner');
+    const loadingSpinner = document.getElementById('loading-spinner');
+
+    const btnSofa = document.getElementById('btn-sofa');
+    const btnChair = document.getElementById('btn-chair');
+    const btnTable = document.getElementById('btn-table');
+
+    const btnMove = document.getElementById('btn-move');
+    const btnScale = document.getElementById('btn-scale');
+    const btnDelete = document.getElementById('btn-delete');
+
+    function updateUI() {
+      // Reset items and actions classes
+      [btnSofa, btnChair, btnTable].forEach(btn => btn.classList.remove('active-mode'));
+      [btnMove, btnScale, btnDelete].forEach(btn => {
+        btn.classList.remove('active-mode');
+        btn.classList.remove('danger-mode');
+      });
+
+      if (currentMode === MODES.PLACE) {
+        if (currentItem === 'sofa') btnSofa.classList.add('active-mode');
+        if (currentItem === 'chair') btnChair.classList.add('active-mode');
+        if (currentItem === 'table') btnTable.classList.add('active-mode');
+        infoBanner.innerText = 'Tap your floor to place ' + currentItem;
+      } else if (currentMode === MODES.MOVE) {
+        btnMove.classList.add('active-mode');
+        infoBanner.innerText = movingObject ? 'Tap to lock placement' : 'Tap a furniture piece to move it';
+      } else if (currentMode === MODES.SCALE) {
+        btnScale.classList.add('active-mode');
+        infoBanner.innerText = 'Tap an item repeatedly to adjust its size';
+      } else if (currentMode === MODES.DELETE) {
+        btnDelete.classList.add('danger-mode');
+        infoBanner.innerText = 'Tap a furniture piece to remove it';
+      }
+    }
+
+    function setMode(mode) {
+      if (movingObject) {
+        // Remove transparency from all materials when dropping
+        movingObject.traverse(child => {
+          if (child.isMesh && child.material && child.material.opacity !== undefined) {
+            child.material.opacity = child.userData.originalOpacity || 1;
+            child.material.transparent = child.userData.originalTransparent || false;
+          }
+        });
+        movingObject = null;
+      }
+      currentMode = mode;
+      updateUI();
+    }
+
+    // Connect UI clicks
+    btnSofa.addEventListener('click', () => { currentItem = 'sofa'; setMode(MODES.PLACE); });
+    btnChair.addEventListener('click', () => { currentItem = 'chair'; setMode(MODES.PLACE); });
+    btnTable.addEventListener('click', () => { currentItem = 'table'; setMode(MODES.PLACE); });
+
+    btnMove.addEventListener('click', () => { setMode(currentMode === MODES.MOVE ? MODES.PLACE : MODES.MOVE); });
+    btnScale.addEventListener('click', () => { setMode(currentMode === MODES.SCALE ? MODES.PLACE : MODES.SCALE); });
+    btnDelete.addEventListener('click', () => { setMode(currentMode === MODES.DELETE ? MODES.PLACE : MODES.DELETE); });
+
+    init();
+    animate();
+
+    function enableShadows(group) {
+      group.traverse(child => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          // Store original materials properties so ghosting (move mode) can revert safely
+          if (child.material) {
+            child.userData.originalOpacity = child.material.opacity;
+            child.userData.originalTransparent = child.material.transparent;
+          }
+        }
+      });
+    }
+
+    // Helper to Auto-Scale imported glTF models to roughly 1 meter in size.
+    // Downloaded models vary wildly (from microscopic to 100 meters wide).
+    function normalizeModelSize(modelGroup, targetSize = 1.0) {
+      const box = new THREE.Box3().setFromObject(modelGroup);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+
+      const maxDim = Math.max(size.x, size.y, size.z);
+      if (maxDim > 0) {
+        const scaleFactor = targetSize / maxDim;
+        modelGroup.scale.set(scaleFactor, scaleFactor, scaleFactor);
+      }
+      return modelGroup;
+    }
+
+    // Creates an invisible collision box for clicking/raycasting imported models reliably
+    function addHitBox(mesh) {
+      const box = new THREE.Box3().setFromObject(mesh);
+      const w = Math.max(0.3, box.max.x - box.min.x);
+      const h = Math.max(0.3, box.max.y - box.min.y);
+      const d = Math.max(0.3, box.max.z - box.min.z);
+
+      const hitBox = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshBasicMaterial({ visible: false })
+      );
+
+      // Center the hit box relative to the mesh
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      hitBox.position.copy(mesh.worldToLocal(center));
+
+      mesh.add(hitBox);
+      mesh.userData.hitBox = hitBox;
+    }
+
+    // This handles loading the user's .glb OR falling back to a dummy procedural cube if missing
+    function loadAsset(itemKey, position, quaternion) {
+      if (modelCache[itemKey]) {
+        // Clone previously loaded model for instant placement!
+        spawnClone(modelCache[itemKey], position, quaternion);
+        return;
+      }
+
+      // We haven't loaded this yet. Try fetching from assets folder.
+      loadingSpinner.style.display = 'block';
+
+      const url = `./assets/${itemKey}.glb`;
+
+      gltfLoader.load(url,
+        (gltf) => {
+          // Success parsing GLB!
+          loadingSpinner.style.display = 'none';
+
+          let model = gltf.scene;
+          model = normalizeModelSize(model, 1.2); // make it roughly 1.2 meters
+
+          enableShadows(model);
+
+          // Cache it
+          modelCache[itemKey] = model;
+
+          // Spawn the instance
+          spawnClone(model, position, quaternion);
+        },
+        undefined, // progress callback
+        (error) => {
+          // Failed! The file probably doesn't exist yet. Fallback to procedural shape to avoid game break.
+          console.warn(`Could not load ${url}. Use Sketchfab to get a model. Falling back to procedural block.`);
+          loadingSpinner.style.display = 'none';
+
+          let color = 0x4ade80;
+          if (itemKey === 'sofa') color = 0xef4444;
+          if (itemKey === 'table') color = 0x3b82f6;
+
+          const group = new THREE.Group();
+          const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(0.8, 0.4, 0.5),
+            new THREE.MeshStandardMaterial({ color: color })
+          );
+          mesh.position.y = 0.2; // sit on floor
+          group.add(mesh);
+          enableShadows(group);
+
+          modelCache[itemKey] = group;
+          spawnClone(group, position, quaternion);
+          infoBanner.innerText = `Add ${itemKey}.glb to 'assets' folder to replace this placeholder!`;
+        }
+      );
+    }
+
+    function spawnClone(cachedModel, position, quaternion) {
+      // Clone the cached object
+      const mesh = cachedModel.clone(true);
+
+      mesh.position.copy(position);
+      mesh.quaternion.copy(quaternion);
+
+      // Add natural rotation offset
+      mesh.rotateY(Math.random() * Math.PI);
+      mesh.userData.scaleLevel = 1.0;
+
+      addHitBox(mesh);
+
+      scene.add(mesh);
+      objectsList.push(mesh);
+
+      // Drop-in Animation
+      const targetY = mesh.position.y;
+      mesh.position.y += 0.5;
+      let t = 0;
+      const bounce = () => {
+        t += 0.08;
+        if (t <= 1) {
+          mesh.position.y = THREE.MathUtils.lerp(mesh.position.y, targetY, 0.2);
+          requestAnimationFrame(bounce);
+        } else {
+          mesh.position.y = targetY;
+        }
+      };
+      bounce();
+    }
+
+    function init() {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+
+      scene = new THREE.Scene();
+
+      // Camera needs small near clipping plane for AR
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.9);
+      hemiLight.position.set(0, 2, 0);
+      scene.add(hemiLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      dirLight.position.set(1, 4, 1.5);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 1024;
+      dirLight.shadow.mapSize.height = 1024;
+      // optimize shadow camera
+      dirLight.shadow.camera.near = 0.5;
+      dirLight.shadow.camera.far = 10;
+      scene.add(dirLight);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      // Good GLTF visual quality requires sRGBOutput
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+      renderer.xr.enabled = true;
+      container.appendChild(renderer.domElement);
+
+      const arButton = ARButton.createButton(renderer, {
+        requiredFeatures: ['hit-test'],
+        optionalFeatures: ['dom-overlay'],
+        domOverlay: { root: document.getElementById('overlay') }
+      });
+      document.getElementById('ar-btn-container').appendChild(arButton);
+
+      controller = renderer.xr.getController(0);
+      controller.addEventListener('select', onSelect);
+      scene.add(controller);
+
+      const reticleGeo = new THREE.RingGeometry(0.12, 0.16, 32).rotateX(-Math.PI / 2);
+      const reticleMat = new THREE.MeshBasicMaterial({ color: 0x4ade80, opacity: 0.8, transparent: true });
+      reticle = new THREE.Mesh(reticleGeo, reticleMat);
+      reticle.matrixAutoUpdate = false;
+      reticle.visible = false;
+      scene.add(reticle);
+
+      window.addEventListener('resize', onWindowResize);
+
+      renderer.xr.addEventListener('sessionstart', () => {
+        intro.style.display = 'none';
+        appUi.style.display = 'flex';
+        infoBanner.innerText = 'Move phone slowly to map your room...';
+      });
+      renderer.xr.addEventListener('sessionend', () => {
+        intro.style.display = 'flex';
+        appUi.style.display = 'none';
+        movingObject = null;
+        setMode(MODES.PLACE);
+      });
+    }
+
+    function getIntersectedObject() {
+      const tempMatrix = new THREE.Matrix4();
+      tempMatrix.identity().extractRotation(controller.matrixWorld);
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+      raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+
+      const hitBoxes = objectsList.map(obj => obj.userData.hitBox).filter(b => b);
+      const intersects = raycaster.intersectObjects(hitBoxes);
+
+      if (intersects.length > 0) {
+        return intersects[0].object.parent;
+      }
+      return null;
+    }
+
+    function onSelect() {
+      if (currentMode === MODES.PLACE) {
+        if (reticle.visible) {
+          const pos = new THREE.Vector3();
+          const quat = new THREE.Quaternion();
+          const scale = new THREE.Vector3();
+          reticle.matrix.decompose(pos, quat, scale);
+
+          // Request loading/spawning the current item at the reticle's position
+          loadAsset(currentItem, pos, quat);
+          infoBanner.innerText = 'Placed!';
+        }
+      }
+      else if (currentMode === MODES.MOVE) {
+        if (movingObject) {
+          movingObject.traverse(child => {
+            if (child.isMesh && child.material) {
+              child.material.opacity = child.userData.originalOpacity || 1;
+              child.material.transparent = child.userData.originalTransparent || false;
+            }
+          });
+          movingObject = null;
+          infoBanner.innerText = 'Locked in place.';
+        } else {
+          const hit = getIntersectedObject();
+          if (hit) {
+            movingObject = hit;
+            movingObject.traverse(child => {
+              if (child.isMesh && child.material) {
+                child.material.transparent = true;
+                child.material.opacity = 0.5;
+              }
+            });
+            infoBanner.innerText = 'Now guiding it... tap anywhere to place.';
+          }
+        }
+      }
+      else if (currentMode === MODES.SCALE) {
+        const hit = getIntersectedObject();
+        if (hit) {
+          hit.userData.scaleLevel += 0.2;
+          if (hit.userData.scaleLevel > 2.0) hit.userData.scaleLevel = 0.6;
+
+          const s = hit.userData.scaleLevel;
+          hit.scale.set(s, s, s);
+          infoBanner.innerText = `Size factor: ${Math.round(s * 100)}%`;
+        }
+      }
+      else if (currentMode === MODES.DELETE) {
+        const hit = getIntersectedObject();
+        if (hit) {
+          scene.remove(hit);
+          objectsList.splice(objectsList.indexOf(hit), 1);
+          infoBanner.innerText = 'Deleted successfully!';
+        }
+      }
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+      renderer.setAnimationLoop(render);
+    }
+
+    function render(timestamp, frame) {
+      if (frame) {
+        const referenceSpace = renderer.xr.getReferenceSpace();
+        const session = renderer.xr.getSession();
+
+        if (hitTestSourceRequested === false) {
+          session.requestReferenceSpace('viewer').then((viewerSpace) => {
+            session.requestHitTestSource({ space: viewerSpace }).then((source) => {
+              hitTestSource = source;
+            });
+          });
+          session.addEventListener('end', () => {
+            hitTestSourceRequested = false;
+            hitTestSource = null;
+          });
+          hitTestSourceRequested = true;
+        }
+
+        if (hitTestSource) {
+          const hitTestResults = frame.getHitTestResults(hitTestSource);
+          if (hitTestResults.length > 0) {
+            const hit = hitTestResults[0];
+            const pose = hit.getPose(referenceSpace);
+
+            if (currentMode === MODES.PLACE || (currentMode === MODES.MOVE && movingObject)) {
+              reticle.visible = true;
+              reticle.matrix.fromArray(pose.transform.matrix);
+
+              if (movingObject) {
+                reticle.matrix.decompose(movingObject.position, movingObject.quaternion, new THREE.Vector3());
+              }
+            } else {
+              reticle.visible = false;
+            }
+          } else {
+            reticle.visible = false;
+          }
+        }
+      }
+      renderer.render(scene, camera);
+    }
+  </script>
+</body>
+
+</html>
