@@ -271,6 +271,12 @@
         </div>
 
         <div class="panel horizontal-tray">
+          <button id="btn-upload" style="background: rgba(168, 85, 247, 0.4); border-color: #d8b4fe;">
+            <span class="icon">📁</span>
+            <span class="label">Upload</span>
+          </button>
+          <input type="file" id="file-input" accept=".glb,.gltf" style="display:none;" />
+
           <button id="btn-vase" class="active-mode">
             <span class="icon">🏺</span>
             <span class="label">Vase</span>
@@ -332,6 +338,9 @@
     const infoBanner = document.getElementById('info-banner');
     const loadingSpinner = document.getElementById('loading-spinner');
 
+    const btnUpload = document.getElementById('btn-upload');
+    const fileInput = document.getElementById('file-input');
+
     const btnVase = document.getElementById('btn-vase');
     const btnChair = document.getElementById('btn-chair');
     const btnTable = document.getElementById('btn-table');
@@ -342,17 +351,18 @@
 
     function updateUI() {
       // Reset items and actions classes
-      [btnVase, btnChair, btnTable].forEach(btn => btn.classList.remove('active-mode'));
+      [btnUpload, btnVase, btnChair, btnTable].forEach(btn => btn.classList.remove('active-mode'));
       [btnMove, btnScale, btnDelete].forEach(btn => {
         btn.classList.remove('active-mode');
         btn.classList.remove('danger-mode');
       });
 
       if (currentMode === MODES.PLACE) {
-        if (currentItem === 'vase') btnVase.classList.add('active-mode');
-        if (currentItem === 'chair') btnChair.classList.add('active-mode');
-        if (currentItem === 'table') btnTable.classList.add('active-mode');
-        infoBanner.innerText = 'Tap your floor to place ' + currentItem;
+        if (currentItem.startsWith('blob:')) btnUpload.classList.add('active-mode');
+        else if (currentItem === 'vase') btnVase.classList.add('active-mode');
+        else if (currentItem === 'chair') btnChair.classList.add('active-mode');
+        else if (currentItem === 'table') btnTable.classList.add('active-mode');
+        infoBanner.innerText = `Tap your floor to place ${currentItem.startsWith('blob:') ? 'custom item' : currentItem}`;
       } else if (currentMode === MODES.MOVE) {
         btnMove.classList.add('active-mode');
         infoBanner.innerText = movingObject ? 'Tap to lock placement' : 'Tap a furniture piece to move it';
@@ -381,6 +391,15 @@
     }
 
     // Connect UI clicks
+    btnUpload.addEventListener('click', () => { fileInput.click(); });
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        currentItem = URL.createObjectURL(file);
+        setMode(MODES.PLACE);
+      }
+    });
+
     btnVase.addEventListener('click', () => { currentItem = 'vase'; setMode(MODES.PLACE); });
     btnChair.addEventListener('click', () => { currentItem = 'chair'; setMode(MODES.PLACE); });
     btnTable.addEventListener('click', () => { currentItem = 'table'; setMode(MODES.PLACE); });
@@ -460,7 +479,8 @@
         'table': 'old_wooden_table.glb'
       };
 
-      const url = `./assets/${fileMap[itemKey]}`;
+      const isUploadedUrl = itemKey.startsWith('blob:');
+      const url = isUploadedUrl ? itemKey : `./assets/${fileMap[itemKey]}`;
 
       gltfLoader.load(url,
         (gltf) => {
@@ -757,7 +777,7 @@
     document.getElementById('fallback-btn').addEventListener('click', async () => {
       intro.style.display = 'none';
       appUi.style.display = 'flex';
-      infoBanner.innerText = 'Fallback Mode: Tap the ground to place items using webcam feed.';
+      infoBanner.innerText = 'Fallback Mode: Point camera & tap the ground.';
 
       renderer.setClearColor(0x000000, 0); // Transparent background
 
@@ -786,9 +806,28 @@
       camera.position.set(0, 1.5, 3);
       camera.lookAt(0, 0, 0);
 
+      // --- DEVICE GYROSCOPE TRACKING FOR POKEMON GO STYLE AR ---
+      let deviceOrientation = { alpha: null, beta: null, gamma: null };
+      const onDeviceOrientation = (event) => {
+        if (event.alpha !== null) deviceOrientation = event;
+      };
+
+      const requestOrientation = () => {
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+          DeviceOrientationEvent.requestPermission().then(r => {
+            if (r === 'granted') window.addEventListener('deviceorientation', onDeviceOrientation);
+          }).catch(console.error);
+        } else {
+          window.addEventListener('deviceorientation', onDeviceOrientation);
+        }
+      };
+
+      // We must request orientation permission on user interaction
+      requestOrientation();
+
       // Virtual Ground for Raycasting
       const virtualGround = new THREE.Mesh(
-        new THREE.PlaneGeometry(50, 50).rotateX(-Math.PI / 2),
+        new THREE.PlaneGeometry(100, 100).rotateX(-Math.PI / 2),
         new THREE.MeshBasicMaterial({ visible: false })
       );
       scene.add(virtualGround);
@@ -879,8 +918,27 @@
       window.addEventListener('pointerdown', onPointerDown);
       window.addEventListener('pointermove', onPointerMove);
 
+      const euler = new THREE.Euler();
+      const q0 = new THREE.Quaternion();
+      const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+      const zee = new THREE.Vector3(0, 0, 1);
+
       const animateFallback = () => {
         requestAnimationFrame(animateFallback);
+
+        // Update Camera based on Gyroscope to simulate AR anchor!
+        if (deviceOrientation.alpha !== null) {
+          const alpha = THREE.MathUtils.degToRad(deviceOrientation.alpha);
+          const beta = THREE.MathUtils.degToRad(deviceOrientation.beta);
+          const gamma = THREE.MathUtils.degToRad(deviceOrientation.gamma);
+          const screenOrient = THREE.MathUtils.degToRad(window.orientation || 0);
+
+          euler.set(beta, alpha, -gamma, 'YXZ');
+          camera.quaternion.setFromEuler(euler);
+          camera.quaternion.multiply(q1);
+          camera.quaternion.multiply(q0.setFromAxisAngle(zee, -screenOrient));
+        }
+
         renderer.render(scene, camera);
       };
       animateFallback();
